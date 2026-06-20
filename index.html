@@ -128,6 +128,20 @@ const CATS = [
   { id:'humiliation', label:'🔥 Humiliation tier'    },
 ];
 
+const WORKOUT_BENEFITS = [
+  { id:'wb_top3',   icon:'🥉', name:'Top 3 finish',           reward:'−20 reps saved',  reps:20 },
+  { id:'wb_win',    icon:'🏆', name:'Won the match',           reward:'−50 reps saved',  reps:50 },
+  { id:'wb_revive', icon:'💊', name:'Clutch revive',           reward:'−15 reps saved',  reps:15 },
+  { id:'wb_kl',     icon:'⚡', name:'Killed the kill leader',  reward:'−20 reps saved',  reps:20 },
+];
+
+const DRINK_BENEFITS = [
+  { id:'db_top3',   icon:'🥉', name:'Top 3 finish',           reward:'Skip 2 sips',  sips:2 },
+  { id:'db_win',    icon:'🏆', name:'Won the match',           reward:'Skip 1 drink', sips:4 },
+  { id:'db_revive', icon:'💊', name:'Clutch revive',           reward:'Skip 1 sip',   sips:1 },
+  { id:'db_kl',     icon:'⚡', name:'Killed the kill leader',  reward:'Skip 2 sips',  sips:2 },
+];
+
 const TIER_BADGE = {
   sip:    '<span class="drink-tier tier-sip">Sip</span>',
   drink:  '<span class="drink-tier tier-drink">Drink</span>',
@@ -137,8 +151,10 @@ const TIER_BADGE = {
 let mode = 'workout';
 const wCounts = Object.fromEntries(WORKOUT_EVENTS.map(e => [e.id, 0]));
 const dCounts = Object.fromEntries(DRINK_EVENTS.map(e =>  [e.id, 0]));
-const wLog = []; // tracks first-click order of event IDs
-const dLog = []; // tracks first-click order of event IDs
+const wBenefitCounts = Object.fromEntries(WORKOUT_BENEFITS.map(e => [e.id, 0]));
+const dBenefitCounts = Object.fromEntries(DRINK_BENEFITS.map(e =>  [e.id, 0]));
+const wLog = []; // { id, isBenefit } in first-click order
+const dLog = []; // { id, isBenefit } in first-click order
 
 /* ───────────────────────────────────────────
    BUILD DOM
@@ -184,6 +200,41 @@ function buildPanel(panelId, events, prefix) {
 
     panel.appendChild(grid);
   });
+
+  // ─── REWARDS SECTION ───
+  const benefitEvents = prefix === 'w' ? WORKOUT_BENEFITS : DRINK_BENEFITS;
+
+  const rewardLabel = document.createElement('div');
+  rewardLabel.className = 'cat-label benefit-label';
+  rewardLabel.textContent = '⚡ Rewards — tap to remove debt';
+  panel.appendChild(rewardLabel);
+
+  const rewardGrid = document.createElement('div');
+  rewardGrid.className = 'events-grid';
+
+  benefitEvents.forEach(ev => {
+    const card = document.createElement('div');
+    card.className = 'event-card benefit-card';
+    card.id = prefix + '-bcard-' + ev.id;
+    card.setAttribute('role', 'button');
+    card.setAttribute('tabindex', '0');
+    card.setAttribute('aria-label', ev.name + ': ' + ev.reward);
+    card.innerHTML = `
+      <div class="card-top">
+        <span class="card-icon" aria-hidden="true">${ev.icon}</span>
+        <span class="card-count" id="${prefix}-bcount-${ev.id}">0</span>
+      </div>
+      <div class="card-name">${ev.name}</div>
+      <div class="card-punishment">→ <b>${ev.reward}</b></div>
+    `;
+
+    const handler = () => logBenefit(ev, prefix);
+    card.addEventListener('click', handler);
+    card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } });
+    rewardGrid.appendChild(card);
+  });
+
+  panel.appendChild(rewardGrid);
 }
 
 buildPanel('panel-workout', WORKOUT_EVENTS, 'w');
@@ -208,7 +259,7 @@ function logEvent(ev, prefix) {
   const log     = prefix === 'w' ? wLog    : dLog;
   const wasZero = counts[ev.id] === 0;
   counts[ev.id]++;
-  if (wasZero) log.push(ev.id); // only track first appearance
+  if (wasZero) log.push({ id: ev.id, isBenefit: false });
 
   const countEl = document.getElementById(prefix + '-count-' + ev.id);
   countEl.textContent = counts[ev.id];
@@ -222,22 +273,50 @@ function logEvent(ev, prefix) {
   card.appendChild(flash);
   flash.addEventListener('animationend', () => flash.remove());
 
-  showToast(ev);
+  showToast(ev, false);
+  updateUI();
+}
+
+/* ───────────────────────────────────────────
+   LOG BENEFIT
+─────────────────────────────────────────── */
+function logBenefit(ev, prefix) {
+  const counts  = prefix === 'w' ? wBenefitCounts : dBenefitCounts;
+  const log     = prefix === 'w' ? wLog           : dLog;
+  const wasZero = counts[ev.id] === 0;
+  counts[ev.id]++;
+  if (wasZero) log.push({ id: ev.id, isBenefit: true });
+
+  const countEl = document.getElementById(prefix + '-bcount-' + ev.id);
+  countEl.textContent = counts[ev.id];
+  countEl.className = 'card-count active';
+
+  const card = document.getElementById(prefix + '-bcard-' + ev.id);
+  card.classList.add('lit');
+
+  const flash = document.createElement('div');
+  flash.className = 'flash-overlay';
+  flash.style.background = 'rgba(0,201,167,0.14)';
+  card.appendChild(flash);
+  flash.addEventListener('animationend', () => flash.remove());
+
+  showToast(ev, true);
   updateUI();
 }
 
 /* ───────────────────────────────────────────
    TOAST
 ─────────────────────────────────────────── */
-function showToast(ev) {
+function showToast(ev, isBenefit) {
   const feed = document.getElementById('killfeed');
   const toast = document.createElement('div');
-  toast.className = 'kf-toast';
+  toast.className = 'kf-toast' + (isBenefit ? ' benefit-toast' : '');
+  const label = isBenefit ? (ev.reward) : ('+' + ev.punishment);
   toast.innerHTML = `
     <span class="kf-icon" aria-hidden="true">${ev.icon}</span>
     <div>
       <div class="kf-event">${ev.name}</div>
-      <div class="kf-punishment">+${ev.punishment}</div>
+      <div class="kf-punishment">${label}</div>
     </div>
   `;
   feed.appendChild(toast);
@@ -261,8 +340,10 @@ function drinkTotal(ev, count) {
 function renderLog() {
   const isWorkout = mode === 'workout';
   const logOrder  = isWorkout ? wLog : dLog;
-  const counts    = isWorkout ? wCounts : dCounts;
-  const events    = isWorkout ? WORKOUT_EVENTS : DRINK_EVENTS;
+  const pCounts   = isWorkout ? wCounts        : dCounts;
+  const bCounts   = isWorkout ? wBenefitCounts : dBenefitCounts;
+  const pEvents   = isWorkout ? WORKOUT_EVENTS   : DRINK_EVENTS;
+  const bEvents   = isWorkout ? WORKOUT_BENEFITS : DRINK_BENEFITS;
   const logList   = document.getElementById('log-list');
   const logCount  = document.getElementById('log-count');
 
@@ -274,22 +355,44 @@ function renderLog() {
     return;
   }
 
-  logList.innerHTML = logOrder.map(id => {
-    const ev    = events.find(e => e.id === id);
-    const count = counts[id];
-    const totalLabel = isWorkout
-      ? `${count * ev.reps} ${ev.unit}`
-      : drinkTotal(ev, count);
-
-    return `
-      <div class="log-entry">
-        <span class="log-icon">${ev.icon}</span>
-        <span class="log-name">${ev.name}</span>
-        <span class="log-count-x">×${count}</span>
-        <span class="log-punishment">${totalLabel}</span>
-      </div>
-    `;
+  logList.innerHTML = logOrder.map(entry => {
+    if (entry.isBenefit) {
+      const ev    = bEvents.find(e => e.id === entry.id);
+      const count = bCounts[entry.id];
+      const saved = isWorkout
+        ? `−${count * ev.reps} reps`
+        : `skip ${drinkBenefitTotal(ev, count)}`;
+      return `
+        <div class="log-entry is-benefit">
+          <span class="log-icon">${ev.icon}</span>
+          <span class="log-name">${ev.name}</span>
+          <span class="log-count-x">×${count}</span>
+          <span class="log-punishment">${saved}</span>
+        </div>
+      `;
+    } else {
+      const ev    = pEvents.find(e => e.id === entry.id);
+      const count = pCounts[entry.id];
+      const totalLabel = isWorkout
+        ? `${count * ev.reps} ${ev.unit}`
+        : drinkTotal(ev, count);
+      return `
+        <div class="log-entry">
+          <span class="log-icon">${ev.icon}</span>
+          <span class="log-name">${ev.name}</span>
+          <span class="log-count-x">×${count}</span>
+          <span class="log-punishment">${totalLabel}</span>
+        </div>
+      `;
+    }
   }).join('');
+}
+
+function drinkBenefitTotal(ev, count) {
+  const total = ev.sips * count;
+  return ev.sips >= 4
+    ? `${total / 4} drink${total / 4 !== 1 ? 's' : ''}`
+    : `${total} sip${total !== 1 ? 's' : ''}`;
 }
 
 /* ───────────────────────────────────────────
@@ -308,10 +411,12 @@ function updateWorkoutUI() {
   });
   const entries     = Object.entries(totals);
   const totalEvents = Object.values(wCounts).reduce((a,b) => a+b, 0);
-  const totalReps   = entries.reduce((s,[k,v]) => k === 'min wall sit' ? s : s+v, 0);
+  const grossReps   = entries.reduce((s,[k,v]) => k === 'min wall sit' ? s : s+v, 0);
+  const benefitReps = WORKOUT_BENEFITS.reduce((s,e) => s + wBenefitCounts[e.id] * e.reps, 0);
+  const totalReps   = Math.max(0, grossReps - benefitReps);
   const wallSit     = totals['min wall sit'];
 
-  document.getElementById('header-events').textContent    = totalEvents;
+  document.getElementById('header-events').textContent    = Object.values(wCounts).reduce((a,b)=>a+b,0) + Object.values(wBenefitCounts).reduce((a,b)=>a+b,0);
   document.getElementById('header-main').textContent      = totalReps;
   document.getElementById('chip-main-label').textContent  = 'Reps owed';
   document.getElementById('hero-eyebrow').textContent     = 'Damage report';
@@ -320,16 +425,20 @@ function updateWorkoutUI() {
   const heroSub   = document.getElementById('hero-sub');
   const heroPills = document.getElementById('hero-pills');
 
-  if (totalEvents === 0) {
+  if (totalEvents === 0 && benefitReps === 0) {
     heroNum.textContent = '0';
     heroNum.classList.remove('has-debt');
     heroSub.textContent = 'reps owed this session';
     heroPills.innerHTML = '<span class="hero-hint">Tap an event below to start logging</span>';
   } else {
     heroNum.textContent = totalReps;
-    heroNum.classList.add('has-debt');
-    heroSub.textContent = 'reps owed' + (wallSit ? ` + ${wallSit} min wall sit` : '');
-    heroPills.innerHTML = entries.map(([k,v]) => `<span class="hero-pill">${v} ${k}</span>`).join('');
+    heroNum.classList.toggle('has-debt', totalReps > 0);
+    heroSub.textContent = totalReps > 0
+      ? 'reps owed' + (wallSit ? ` + ${wallSit} min wall sit` : '')
+      : benefitReps > 0 ? 'debt cleared 🎉' : 'reps owed this session';
+    const pills = entries.map(([k,v]) => `<span class="hero-pill">${v} ${k}</span>`);
+    if (benefitReps > 0) pills.push(`<span class="hero-pill" style="background:rgba(0,201,167,0.12);color:var(--accent);border-color:rgba(0,201,167,0.2)">−${benefitReps} saved</span>`);
+    heroPills.innerHTML = pills.join('');
   }
 
   const chips = document.getElementById('workout-chips');
@@ -338,8 +447,9 @@ function updateWorkoutUI() {
     chips.innerHTML = '<span class="tray-empty">No debt yet — go get eliminated</span>';
     btn.disabled = true;
   } else {
-    chips.innerHTML = entries.map(([k,v]) => `<div class="ex-chip"><span>${v}</span>&nbsp;${k}</div>`).join('');
-    btn.disabled = false;
+    chips.innerHTML = entries.map(([k,v]) => `<div class="ex-chip"><span>${v}</span>&nbsp;${k}</div>`).join('')
+      + (benefitReps > 0 ? `<div class="ex-chip" style="color:var(--accent)"><span>−${benefitReps}</span>&nbsp;saved</div>` : '');
+    btn.disabled = totalReps === 0;
   }
 }
 
@@ -354,10 +464,12 @@ function updateDrinkUI() {
       if (e.type === 'finish') finishCount += n;
     }
   });
+  const benefitSips = DRINK_BENEFITS.reduce((s,e) => s + dBenefitCounts[e.id] * e.sips, 0);
+  const netSips     = Math.max(0, totalSips - benefitSips);
   const totalEvents = Object.values(dCounts).reduce((a,b) => a+b, 0);
 
-  document.getElementById('header-events').textContent   = totalEvents;
-  document.getElementById('header-main').textContent     = totalSips;
+  document.getElementById('header-events').textContent   = totalEvents + Object.values(dBenefitCounts).reduce((a,b)=>a+b,0);
+  document.getElementById('header-main').textContent     = netSips;
   document.getElementById('chip-main-label').textContent = 'Sip units';
   document.getElementById('hero-eyebrow').textContent    = 'Drink report';
 
@@ -365,30 +477,32 @@ function updateDrinkUI() {
   const heroSub   = document.getElementById('hero-sub');
   const heroPills = document.getElementById('hero-pills');
 
-  if (totalEvents === 0) {
+  if (totalEvents === 0 && benefitSips === 0) {
     heroNum.textContent = '0';
     heroNum.classList.remove('has-debt');
     heroSub.textContent = 'drinks owed this session';
     heroPills.innerHTML = '<span class="hero-hint">Tap an event below to start logging</span>';
   } else {
-    heroNum.textContent = totalSips;
-    heroNum.classList.add('has-debt');
-    heroSub.textContent = 'sip units consumed';
+    heroNum.textContent = netSips;
+    heroNum.classList.toggle('has-debt', netSips > 0);
+    heroSub.textContent = netSips === 0 ? 'tab cleared 🎉' : 'sip units consumed';
     const parts = [];
     if (sipCount)    parts.push(`${sipCount} sip${sipCount > 1 ? 's' : ''}`);
     if (drinkCount)  parts.push(`${drinkCount} drink${drinkCount > 1 ? 's' : ''}`);
     if (finishCount) parts.push(`${finishCount} finish`);
+    if (benefitSips) parts.push(`<span style="color:var(--accent)">−${benefitSips} skipped</span>`);
     heroPills.innerHTML = parts.map(p => `<span class="hero-pill">${p}</span>`).join('');
   }
 
   const chips = document.getElementById('drink-chips');
-  if (totalEvents === 0) {
+  if (totalEvents === 0 && benefitSips === 0) {
     chips.innerHTML = '<span class="tray-empty">No drinks yet — go play a round</span>';
   } else {
     const parts = [];
     if (sipCount)    parts.push(`<div class="ex-chip"><span>${sipCount}</span>&nbsp;sip${sipCount>1?'s':''}</div>`);
     if (drinkCount)  parts.push(`<div class="ex-chip"><span>${drinkCount}</span>&nbsp;drink${drinkCount>1?'s':''}</div>`);
     if (finishCount) parts.push(`<div class="ex-chip"><span>${finishCount}</span>&nbsp;finish</div>`);
+    if (benefitSips) parts.push(`<div class="ex-chip" style="color:var(--accent)"><span>−${benefitSips}</span>&nbsp;skipped</div>`);
     chips.innerHTML = parts.join('');
   }
 }
@@ -406,6 +520,13 @@ function resetAll() {
       const card = document.getElementById('w-card-' + e.id);
       if (card) card.classList.remove('lit');
     });
+    WORKOUT_BENEFITS.forEach(e => {
+      wBenefitCounts[e.id] = 0;
+      const c = document.getElementById('w-bcount-' + e.id);
+      if (c) { c.textContent = '0'; c.className = 'card-count'; }
+      const card = document.getElementById('w-bcard-' + e.id);
+      if (card) card.classList.remove('lit');
+    });
   } else {
     dLog.length = 0;
     DRINK_EVENTS.forEach(e => {
@@ -413,6 +534,13 @@ function resetAll() {
       const c = document.getElementById('d-count-' + e.id);
       if (c) { c.textContent = '0'; c.className = 'card-count'; }
       const card = document.getElementById('d-card-' + e.id);
+      if (card) card.classList.remove('lit');
+    });
+    DRINK_BENEFITS.forEach(e => {
+      dBenefitCounts[e.id] = 0;
+      const c = document.getElementById('d-bcount-' + e.id);
+      if (c) { c.textContent = '0'; c.className = 'card-count'; }
+      const card = document.getElementById('d-bcard-' + e.id);
       if (card) card.classList.remove('lit');
     });
   }

@@ -163,7 +163,10 @@ header {
 
 @media (prefers-reduced-motion: reduce) { .kf-toast, .kf-toast.leaving { animation: none; } }
 
-.kf-icon { font-size: 16px; flex-shrink: 0; }
+.kf-toast.benefit-toast { border-left-color: var(--accent); }
+.kf-toast.benefit-toast .kf-punishment { color: var(--accent); }
+
+
 .kf-event { font-size: 11px; color: var(--text-2); }
 .kf-punishment {
   font-family: 'Barlow Condensed', sans-serif;
@@ -455,6 +458,23 @@ header {
 .tier-sip    { background: rgba(212,146,10,0.12); color: #C89020; border: 0.5px solid rgba(212,146,10,0.2); }
 .tier-drink  { background: rgba(212,146,10,0.20); color: #D4920A; border: 0.5px solid rgba(212,146,10,0.3); }
 .tier-finish { background: rgba(220,60,60,0.15);  color: #E05050; border: 0.5px solid rgba(220,60,60,0.28); }
+
+/* ─── BENEFIT / REWARD CARDS ─── */
+.cat-label.benefit-label { color: var(--accent); }
+.cat-label.benefit-label::after { background: rgba(0,201,167,0.15); }
+
+.event-card.benefit-card:hover { border-color: rgba(0,201,167,0.28); background: var(--surface2); }
+.event-card.benefit-card.lit   { border-color: rgba(0,201,167,0.38); background: var(--surface2); }
+.benefit-card .card-punishment b { color: var(--accent) !important; }
+.benefit-card .card-count.active {
+  background: rgba(0,201,167,0.12);
+  color: var(--accent);
+  border-color: rgba(0,201,167,0.28);
+}
+
+/* ─── BENEFIT LOG ENTRIES ─── */
+.log-entry.is-benefit .log-count-x  { color: rgba(0,201,167,0.45); }
+.log-entry.is-benefit .log-punishment { color: var(--accent); }
 
 /* ─── BOTTOM TRAY ─── */
 .tray {
